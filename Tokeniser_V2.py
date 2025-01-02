@@ -1,6 +1,8 @@
 import re
 from importlib.metadata import version
 import tiktoken
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 with open ("the-verdict.txt.rtf", "r", encoding="utf-8") as f:
     raw_text = f.read()
@@ -103,6 +105,78 @@ tokeniser = tiktoken.get_encoding("gpt2")
 
 text = ("Akwirw <|endoftext|> ier.")
 integers = tokeniser.encode(text, allowed_special={"<|endoftext|>"})
-print(integers)
+#print(integers)
 strings = tokeniser.decode(integers)
-print(strings)
+#print(strings)
+
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+
+enc_text = tokeniser.encode(raw_text)
+#print(len(enc_text))
+enc_sample = enc_text[50:]
+
+context_size = 4 #Determines how many tokens are included in the input
+x = enc_sample[:context_size]
+y = enc_sample[1:context_size + 1]
+#print(f"x: {x}")
+#print(f"y:       {y}")
+
+for i in range(1, context_size+1):
+    context = enc_sample[:i]
+    desired = enc_sample[i]
+    #print(context, "--->", desired)
+    #print(tokeniser.decode(context)), "--->", tokeniser.decode([desired])
+
+class GPTDatasetV1(Dataset):
+    def __init__(self, txt, tokeniser, max_length, stride):
+        self.input_ids = []
+        self.target_ids = []
+
+        #Encodes entire text
+        token_ids = tokeniser.encode(txt)
+
+        #Uses a sliding window algo to chunk the book into overlapping sequences of max.length
+        for i in range (0, len(token_ids) - max_length, stride):
+            input_chunk = token_ids[i:i + max_length]
+            target_chunk = token_ids[i+1:i + max_length + 1]
+            self.input_ids.append(torch.tensor(input_chunk))
+            self.target_ids.append(torch.tensor(target_chunk))
+
+    #Returns total number of rows in the dataset
+    def __len__(self):
+        return len(self.input_ids)
+
+    #Returns a single row from the dataset
+    def __getitem__(self, idx):
+        return self.input_ids[idx], self.target_ids[idx]
+
+def create_dataloader_v1(txt, batch_size=4, max_length=256,
+                         stride=128, shuffle=True, drop_last=True,
+                         num_workers=0):
+
+    #Initialises the tokeniser
+    tokeniser = tiktoken.get_encoding("gpt2")
+
+    #Creates our dataset
+    dataset = GPTDatasetV1(txt, tokeniser, max_length, stride)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last, #Drops last batch if it is shorter than the specified batch_size to prevent loss spikes during training
+        num_workers=num_workers #The number of CPU processes to use for preprocessing
+    )
+
+    return dataloader
+
+with open("the-verdict.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+
+dataloader = create_dataloader_v1(raw_text, batch_size=1, max_length=4,
+                                  stride=1, shuffle=False)
+data_iter = iter(dataloader) #Converts dataloader into Python iterator to fetch next entry via next() function
+first_batch = next(data_iter)
+print(first_batch)
+
+
