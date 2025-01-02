@@ -177,6 +177,26 @@ dataloader = create_dataloader_v1(raw_text, batch_size=1, max_length=4,
                                   stride=1, shuffle=False)
 data_iter = iter(dataloader) #Converts dataloader into Python iterator to fetch next entry via next() function
 first_batch = next(data_iter)
-print(first_batch)
+second_batch = next(data_iter)
+#print(first_batch)
+#print(second_batch)
+
+dataloader = create_dataloader_v1(raw_text, batch_size=8, max_length=4,
+                                  stride=4, shuffle=False)
+data_iter = iter(dataloader) #Converts dataloader into Python iterator to fetch next entry via next() function
+inputs, targets = next(data_iter)
+#print("Inputs:\n", inputs)
+#print("Targets:\n", targets)
+
+input_ids = torch.tensor([2,3,5,1])
+vocab_size = 6
+output_dim = 3
+
+torch.manual_seed(123)
+embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
+#The weight matrix of the embedding layer shown through the following print statement
+#shows a bunch of small random values. These will be adjusted an optimised through training.
+#print(embedding_layer.weight)
+print(embedding_layer(torch.tensor(input_ids)))
 
 
