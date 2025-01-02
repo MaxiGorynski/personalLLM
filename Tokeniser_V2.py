@@ -1,4 +1,6 @@
 import re
+from importlib.metadata import version
+import tiktoken
 
 with open ("the-verdict.txt.rtf", "r", encoding="utf-8") as f:
     raw_text = f.read()
@@ -92,5 +94,15 @@ text = " <|endoftext|> ".join((text1, text2))
 #print(text)
 
 tokeniser = SimpleTokeniserV2(vocab)
-print(tokeniser.encode(text))
-print(tokeniser.decode(tokeniser.encode(text)))
+#print(tokeniser.encode(text))
+#print(tokeniser.decode(tokeniser.encode(text)))
+
+#print("tiktoken version: ", version("tiktoken"))
+
+tokeniser = tiktoken.get_encoding("gpt2")
+
+text = ("Akwirw <|endoftext|> ier.")
+integers = tokeniser.encode(text, allowed_special={"<|endoftext|>"})
+print(integers)
+strings = tokeniser.decode(integers)
+print(strings)
