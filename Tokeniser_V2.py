@@ -197,6 +197,101 @@ embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
 #The weight matrix of the embedding layer shown through the following print statement
 #shows a bunch of small random values. These will be adjusted an optimised through training.
 #print(embedding_layer.weight)
-print(embedding_layer(torch.tensor(input_ids)))
+#print(embedding_layer(torch.tensor(input_ids)))
+
+vocab_size = 50257
+output_dim = 256
+token_embedding_layer = torch.nn.Embedding(vocab_size, output_dim)
+
+max_length = 4
+dataloader = create_dataloader_v1(
+    raw_text, batch_size=8, stride=max_length, max_length=max_length, shuffle=False
+)
+
+#Embeds token IDs into a tensor with 8x4 dimensions
+data_iter = iter(dataloader)
+inputs, targets = next(data_iter)
+#print("Token IDs:\n", inputs)
+#print("\nInputs shape: \n", inputs.shape)
+
+#Embed these token IDs into 256-dimensional vectors
+token_embeddings = token_embedding_layer(inputs)
+#print(token_embeddings.shape)
+
+#Create an additional layer with the same embedding dimension as the token_embedding_layer
+#Input to pos_embeddings is usually a placeholder value, torch.arange etc etc
+#Context_length is a variable representing supported input size of the LLM
+#Input text can be longer than supported context length, which requires text truncation
+context_length = max_length
+pos_embedding_layer = torch.nn.Embedding(context_length, output_dim)
+pos_embeddings = pos_embedding_layer(torch.arange(context_length))
+#print(pos_embeddings.shape)
+
+#Now, we add the positional embedding tensor of four 256-dim vecotrs to the token embeddings...
+#...adding 4x256-dim pos_embeddings tensor to each 4X256-dim toke embedding tensor...
+#...in each of the 8 batches
+
+input_embeddings = token_embeddings + pos_embeddings
+#print(input_embeddings.shape)
+
+inputs = torch.tensor(
+  [[0.43, 0.15, 0.89], # Your     (x^1)
+   [0.55, 0.87, 0.66], # journey  (x^2)
+   [0.57, 0.85, 0.64], # starts   (x^3)
+   [0.22, 0.58, 0.33], # with     (x^4)
+   [0.77, 0.25, 0.10], # one      (x^5)
+   [0.05, 0.80, 0.55]] # step     (x^6)
+)
+
+query = inputs[1]
+#The second input token serves as the query
+attn_scores_2 = torch.empty(inputs.shape[0])
+for i, x_i in enumerate(inputs):
+    attn_scores_2[i] = torch.dot(x_i, query)
+#print(attn_scores_2)
+
+def softmax_naive(x):
+    return torch.exp(x) / torch.exp(x).sum(dim=0)
+
+attn_weights_2 = torch.softmax(attn_scores_2, dim=0)
+#print("Attention weights:", attn_weights_2)
+#print("Sum:", attn_weights_2.sum())
+
+query = inputs[1]
+#The second input token serves as the query
+context_vec_2 = torch.zeros(query.shape)
+for i, x_i in enumerate(inputs):
+    context_vec_2 += attn_weights_2[i]*x_i
+#print(context_vec_2)
+
+attn_scores = torch.empty(6, 6) #Empty tensor for storing vectors for all six words in the sentence relative to each other
+
+#This double loop computes the dot product for every pair of tokens, treating one as the key token, one as the query token
+#Uses for loops, which are a little slow
+for i, x_i in enumerate(inputs):
+    for j, x_j in enumerate(inputs):
+        attn_scores[i, j] = torch.dot(x_i, x_j)
+#print(attn_scores)
+
+#Alternative using matrix multiplication
+attn_scores = inputs @ inputs.T
+#print(attn_scores)
+
+#Now, we normalise the rows
+#We set dims to -1 as a means of instructing the softmax function to apply normalisation along the last dimension of the attn_scores tensor.
+#-1 means the last dimension of the 6x6 tensor, which is 'columns'. This means normalisation is done row-by-row...
+#...across the columns. We want every row to sum to 1
+attn_weights = torch.softmax(attn_scores, dim=-1)
+#print(attn_weights)
+
+#Verify that normalisation was successful by testing that all rows sum to 1
+row_2_sum = sum([0.1385, 0.2379, 0.2333, 0.1240, 0.1082, 0.1581])
+#print("Row 2 sum:", row_2_sum)
+#print("All row sums:", attn_weights.sum(dim=-1))
+
+#Finally, we use the attention weights to compute all context vectors via matrix multiplication
+all_context_vecs = attn_weights @ inputs
+#print(all_context_vecs)
+
 
 
