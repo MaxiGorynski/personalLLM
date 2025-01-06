@@ -1,3 +1,10 @@
+import re
+from importlib.metadata import version
+import tiktoken
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+
 class SimpleTokeniserV2:
     def __init__(self, vocab):
         self.str_to_int = vocab

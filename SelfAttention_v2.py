@@ -1,3 +1,10 @@
+import re
+from importlib.metadata import version
+import tiktoken
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+
 class SelfAttention_v2(nn.Module):
     def __init__(self, d_in, d_out, qkv_bias=False):
         super().__init__()

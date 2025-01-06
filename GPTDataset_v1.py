@@ -1,3 +1,10 @@
+import re
+from importlib.metadata import version
+import tiktoken
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+
 class GPTDatasetV1(Dataset):
     def __init__(self, txt, tokeniser, max_length, stride):
         self.input_ids = []
