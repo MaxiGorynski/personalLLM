@@ -1,3 +1,8 @@
+#This MultiHeadAttention module allows us to use single matrix multiplications
+#to compute keys, queries and values, instead of repeating it, as in a
+#wrapper class. This saves on computationally expensive steps.
+
+
 class MultiHeadAttention(nn.Module):
     #Class constructor
     def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
