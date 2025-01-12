@@ -538,13 +538,20 @@ class MultiHeadAttention(nn.Module):
             #Fill masked positions with negative infinity, prevents future tokens being seen
             attn_scores.masked_fill_(mask_bool, -torch.inf)
 
+            #Normalise attention scores, apply softmax to get weights
             attn_weights = torch.softmax(
                 attn_scores / keys.shape[-1]**0.5, dim=-1)
+
+            #Apply dropout for regularisationn
             attn_weights = self.dropout(attn_weights)
 
+            #Compute weighted sum of values using attention weights/matrix mult.
             context_vec = (attn_weights @ values).transpose(1,2)
 
+            #Rehsape context vector to original shape (batch_size, num_tokens, d_out)
             context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+
+            #Final output projection to obtain result of multi-head attention
             context_vec = self.out_prok(context_vec)
             return context_vec
 
