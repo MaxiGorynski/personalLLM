@@ -1,5 +1,7 @@
 import re
 from importlib.metadata import version
+import re
+from importlib.metadata import version
 import tiktoken
 import torch
 from torch.utils.data import Dataset, DataLoader

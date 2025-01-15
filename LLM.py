@@ -4,6 +4,8 @@ import tiktoken
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
 
 with open ("the-verdict.txt.rtf", "r", encoding="utf-8") as f:
     raw_text = f.read()
@@ -673,9 +675,9 @@ var = out.var(dim=-1, keepdim=True)
 out_norm = (out - mean) / torch.sqrt(var)
 mean = out_norm.mean(dim=-1, keepdim=True)
 var = out_norm.var(dim=-1, keepdim=True)
-print("Normalised layer outputs:\n", out_norm)
-print("Mean:\n", mean)
-print("Variance:\n", var)
+#print("Normalised layer outputs:\n", out_norm)
+#print("Mean:\n", mean)
+#print("Variance:\n", var)
 
 class LayerNorm(nn.Module):
     #Works on last dimension of input tensor x
@@ -691,4 +693,53 @@ class LayerNorm(nn.Module):
         norm_x = (x - mean) / torch.sqrt(var + self.eps)
         return self.scale * norm_x + self.shift
 
+
+ln = LayerNorm(emb_dim=5)
+out_ln = ln(batch_example)
+mean = out_ln.mean(dim=-1, keepdim=True)
+var = out_ln.var(dim=-1, unbiased=False, keepdim=True)
+#print("Mean:\n", mean)
+#print("Variance:\n", var)
+
+class GELU(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * (x + 0.044715 * torch.pow(x + 3, 3))))
+
+
+gelu, relu = GELU(), nn.ReLU()
+
+# Generate 100 evenly spaced points between -3 and 3 to represent input values for the activation functions.
+x = torch.linspace(-3, 3, 100)
+
+# Apply the GELU and ReLU activation functions to the input values.
+# `gelu(x)` computes the Gaussian Error Linear Unit activation for each value in `x`.
+# `relu(x)` computes the Rectified Linear Unit activation for each value in `x`.
+y_gelu, y_relu = gelu(x), relu(x)
+
+# Create a new figure with a specified size of 8x3 inches to plot the activation functions.
+plt.figure(figsize=(8, 3))
+
+# Loop through the activation functions and their labels to create two subplots.
+for i, (y, label) in enumerate(zip([y_gelu, y_relu], ["GELU", "ReLU"]), 1):
+    # Create a subplot (1 row, 2 columns, i-th plot).
+    plt.subplot(1, 2, i)
+    # Plot the input `x` values against the corresponding activation outputs `y`.
+    plt.plot(x, y)
+    # Set the title of the current subplot to indicate the activation function being plotted.
+    plt.title(f"{label} activation function")
+    # Label the x-axis as "x" (input to the activation function).
+    plt.xlabel("x")
+    # Label the y-axis to indicate the output of the corresponding activation function.
+    plt.ylabel(f"{label} (x)")
+    # Add a grid to the subplot for better visualization of the plot.
+    plt.grid(True)
+
+# Adjust the spacing between subplots to prevent overlapping labels and titles.
+plt.tight_layout()
+
+# Display the figure with the plotted activation functions.
+plt.show()
 

@@ -2,6 +2,12 @@
 #to compute keys, queries and values, instead of repeating it, as in a
 #wrapper class. This saves on computationally expensive steps.
 
+import re
+from importlib.metadata import version
+import tiktoken
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
 
 class MultiHeadAttention(nn.Module):
     #Class constructor
