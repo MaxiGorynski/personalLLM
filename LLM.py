@@ -586,19 +586,29 @@ second_head = a[0, 1, :, :]
 second_res = second_head @ second_head.T
 #print("\nSecond head:\n", second_res)
 
-block_size = 1024
-d_in, d_out = 768, 768
-num_heads = 12
-mha = MultiHeadAttention(d_in, d_out, block_size, context_length, dropout, num_heads)
+#block_size = 1024
+#d_in, d_out = 768, 768
+#num_heads = 12
+#mha = MultiHeadAttention(d_in, d_out, block_size, context_length, dropout, num_heads)
+
+GPT_CONFIG_124M = {
+    "vocab_size": 50257,        #Vocabulary size
+    "context_length": 1024,     #Context length, how many tokens the model can handle via positional embeddings
+    "emb_dim": 768,             #Embedding dimensions
+    "n_heads": 12,              #Number of attention heads
+    "n_layers": 12,             #Number of NN layers/transformer blocks
+    "drop_rate": 0.1,           #Drouput rate of hidden units to prevent overfitting
+    "qkv_bias": False           #Query-Key-Value bias
+}
 
 class DummyGPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
-        self.drop_emb = n.Dropout(cfg["drop_rate"])
+        self.drop_emb = nn.Dropout(cfg["drop_rate"])
         self.trf_blocks = nn.Sequential(
-            * [DummyTransformerBlock (cfg)
+            *[DummyTransformerBlock(cfg)
                for _ in range(cfg["n_layers"])]
         )
         self.final_norm = DummyLayerNorm(cfg["emb_dim"])
@@ -608,7 +618,7 @@ class DummyGPTModel(nn.Module):
         batch_size, seq_len = in_idx.shape
         tok_embeds = self.tok_emb(in_idx)
         pos_embeds = self.pos_emb(
-            torch.arrange(seq_len, device=in_idx.device)
+            torch.arange(seq_len, device=in_idx.device)
         )
         x = tok_embeds + pos_embeds
         x = self.drop_emb(x)
@@ -626,9 +636,59 @@ class DummyTransformerBlock(nn.Module):
         return x
 
 class DummyLayerNorm(nn.Module):
-    def __init__(self, normalized_shape, eps=le-5):
+    def __init__(self, normalized_shape, eps=1e-5):
         super().__init__()
 
     def forward(self, x):
         return x
+
+tokeniser = tiktoken.get_encoding("gpt2")
+batch = []
+txt1 = "Every effort moves you"
+txt2 = "Every day holds a"
+
+batch.append(torch.tensor(tokeniser.encode(txt1)))
+batch.append(torch.tensor(tokeniser.encode(txt2)))
+batch = torch.stack(batch, dim=0)
+#print(batch)
+
+torch.manual_seed(123)
+model = DummyGPTModel(GPT_CONFIG_124M)
+logits = model(batch)
+#print("Output shape:", logits.shape)
+#print(logits)
+
+torch.manual_seed(123)
+batch_example = torch.randn(2, 5)
+layer = nn.Sequential (nn.Linear(5, 6), nn.ReLU()) #ReLU thresholds negative inputs to 0, meaning all outputs are positive.
+out = layer(batch_example)
+#print(out)
+
+mean = out.mean(dim=-1, keepdim=True) #keepdim guarantees the output tensor has the same number of dims as the input tensor
+var = out.var(dim=-1, keepdim=True)
+#print("Mean:\n", mean)
+#print("Variance:\n", var)
+
+#Next, we apply layer normalisation, involving subtracting the mean and dividing by the square root of the variance (i.e. the standard deviation)
+out_norm = (out - mean) / torch.sqrt(var)
+mean = out_norm.mean(dim=-1, keepdim=True)
+var = out_norm.var(dim=-1, keepdim=True)
+print("Normalised layer outputs:\n", out_norm)
+print("Mean:\n", mean)
+print("Variance:\n", var)
+
+class LayerNorm(nn.Module):
+    #Works on last dimension of input tensor x
+    def __init__(self, emb_dim):
+        super().__init__()
+        self.eps = 1e-5 #Small constant added to the variance to prevent div by zero during normalisation
+        self.scale = nn.Parameter(torch.ones(emb_dim)) #Automatically adjusted during training if performance will improve
+        self.shift = nn.Parameter(torch.zeros(emb_dim)) #Automatically adjusted during training if performance will improve
+
+    def forward(self, x):
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.scale * norm_x + self.shift
+
 
