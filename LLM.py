@@ -741,5 +741,47 @@ for i, (y, label) in enumerate(zip([y_gelu, y_relu], ["GELU", "ReLU"]), 1):
 plt.tight_layout()
 
 # Display the figure with the plotted activation functions.
-plt.show()
+#plt.show()
+
+class FeedForward(nn.Module):
+    #A small NN consisting of two Linear layers and a GELU activation function.
+    def __init__(self, cfg):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]),
+            GELU(),
+            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+ffn = FeedForward(GPT_CONFIG_124M)
+x = torch.rand(2, 3, 768)
+out = ffn(x)
+#print(out.shape)
+
+class ExampleDeepNeuralNetwork(nn.Module):
+    #Deep NN with five layers, each consisting of a Linear layer and a GELU activation function
+    #Forward pass, iteratively pass through layers and add shortcuts where shortcut is set to True
+    def __init__(self, layer_sizes, use_shortcut):
+        super().__init__()
+        self.use_shortcut = use_shortcut
+        self.layers = nn.ModuleList([
+            nn.Sequential(nn.Linear(layer_sizes[0], layer_sizes[1]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[1], layer_sizes[2], GELU())),
+            nn.Sequential(nn.Linear(layer_sizes[2], layer_sizes[3]), GELU()),
+            nnn.Sequential(nn.Linear(layer_sizes[3], layer_sizes[4]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[4], layer_sizes[5]), GELU())
+        ])
+
+    def forward(self, x):
+        for layer in self.layers:
+            layer_output = layer(x) #Compute the output of the current layer
+            if self.use_shortcut and x.shape == layer_output.shape: #See if shortcut can be applied
+                x = x + layer_output
+            else:
+                x = layer_output
+        return x
+
 
