@@ -321,5 +321,702 @@ tensor([[0.2098, 0.2006, 0.1981, 0.1242, 0.1220, 0.1452],
         [0.1526, 0.1958, 0.1975, 0.1367, 0.1879, 0.1295],
         [0.1385, 0.2184, 0.2128, 0.1420, 0.0988, 0.1896]])
 
--
+- In the final step, we use the attention weights to compute all context vectors via matrix multiplication
+
+Implementing Self-Attention with Trainable Weights
+- Now, we will implement a self-attention mechanism. Popular in transformer architecture, GPT models etc.
+- Called scaled dot-product attention. This is done to avoid small gradients; these are troublesome during back propagation, and can cause learning to slow down.
+- Previously we coded a simplified attention mewchanism to understand the basic mechanism behind attention mechanisms. Now, we add trainable weights.
+- We want to compute context vectors as weighted sums over the input vectors specific to a certain input element.
+- Only slight differences to the self-attention mechanism already coded, just with the introduction of weight matrices
+
+- Implementing self-attention step-by-step by introducing three trainable weight matrices, Wq, Wk, Wv. We compute them for each input element (x1, x2 etc).
+- We designate query inputs/query tokens for each round, as before. This query vector is obtained via matrix multiplication between input (e.g. x2) and the weight matrix (Wq). We obtain key and value vectors doing the same thing using Wk and Wv.
+
+#Initialise the three weight matrices, Wq for query, Wk for key, Wv for v value vectors
+#Grad is set to false to reduce output clutter, but they should be set to True during model
+#training so that matrices are updated
+torch.manual_seed(123)
+W_query = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
+W_key = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
+W_value = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
+
+query_2 = x_2 @ W_query
+key_2 = x_2 @ W_key
+value_2 = x_2 @ W_value
+print(query_2)
+
+Output:
+tensor([0.4306, 1.4551])
+
+- The output is a two-dimensional tensor because we set the number of columns in the weight matrix to 2 with d_out (even though the number of input was d=3; in most other attention scenarios both in and out will be the same!)
+- Having obtained the query vector, we obtain all the keys and value vectors through matrix multiplication
+
+keys = inputs @ W_key
+values = inputs @ W_value
+print("keys.shape:", keys.shape)
+print("values.shape:", values.shape)
+
+- The output will show that we’ve projected the six input tokens from a three-dimensional space into a two-dimensional embedding space
+- Next step is computing attention scores
+- As with the self-attention mechanism without weights, we calculate the attention score by performing dot-product using the query and key obtained by transforming the inoputs via their weight matrices
+- First, compute the attention score (in this case for x2):
+
+keys_2 = keys[1] #Performing this on x^2 to start, so skipping to index 1, where x^2 is held
+#Dot product of the query vector by the key vector
+attn_scores_22 = query_2.dot(keys_2)
+print(attn_scores_22)
+
+- Then, we generalise this using matrix multiplication
+- After that, we go from attention scores to attention weights. We do this by scaling the attention scores (by dividing them by the square root of the embedding dimension of the keys) and using the softmax function
+
+d_k = keys.shape[-1]
+attn_weights_2 = torch.softmax(attn_scores_2 / d_k ** 0.5, dim=-1)
+print(attn_weights_2)
+
+- Finally, with all this in hand, we compute the context vectors; as before, a weighted sum over the input vectors, we now compute the context vector as a weighted sum over the value vectors. The weights determine the importance of each value vector.
+
+#Calculating the context vectors using the attention weights with matrix multiplication
+context_vec_2 = attn_weights_2 @ values
+#print(context_vec_2)
+
+
+- Now, let’s turn this weighted self-attention mechanism into a compact class
+
+class SelfAttention_v1(nn.Module):
+    def __init__(self, d_in, d_out):
+        super().__init__()
+        self.W_query = nn.Parameter(torch.rand(d_in, d_out))
+        self.W_key = nn.Parameter(torch.rand(d_in, d_out))
+        self.W_value = nn.Parameter(torch.rand(d_in, d_out))
+
+    def forward(self, x):
+        keys = x @ self.W_key
+        queries = x @ self.W_query
+        values = x @ self.W_value
+        attn_scores = queries @ keys.T  # omega
+        attn_weights = torch.softmax(attn_scores / keys.shape[-1] ** 0.5, dim=-1)
+        context_vec = attn_weights @ values
+        return context_vec
+
+- This is derived from nn.Module, a vital PyTorch building block for model layer creation and management
+- The __init__ initialises trainable weight matrices for queries, keys and values, before normalisation
+- We can use the class like this:
+
+torch.manual_seed(123)
+sa_v1 = SelfAttention_v1(d_in, d_out)
+print(sa_v1(inputs))
+
+- Can further improve our class by using PyTorch’s nn.Linear layers, which effectively handle matrix multiplication
+
+class SelfAttention_v2(nn.Module):
+    def __init__(self, d_in, d_out, qkv_bias=False):
+        super().__init__()
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+
+    def forward(self, x):
+        keys = self.W_key(x)
+        queries = self.W_query(x)
+        values = self.W_value(x)
+        attn_scores = queries @ keys.T
+        attn_weights = torch.softmax(attn_scores/ keys.shape[-1] ** 0.5, dim=-1)
+        context_vec = attn_weights @ values
+        return context_vec
+
+Hiding future words with causal attention
+- Causal attention is a critical mechanism - stops the model accessing future words (as the prediction should depend only on prior words and current inputs). Also known as masked attention.
+- We take attention scores and attention weights; we mask with ‘O’s above diagonal to produce Masked Attention Scores, then normalise them
+- Compute attention weights for masked attention
+
+queries = sa_v2.W_query(inputs)
+keys = sa_v2.W_key(inputs)
+attn_scores = queries @ keys.T
+attn_weights = torch.softmax(attn_scores/keys.shape[-1] ** 0.5, dim=-1)
+print(attn_weights)
+
+- Use tril to create a mask where values above diagonal are zero
+
+context_length = attn_scores.shape[0]
+mask_simple = torch.tril(torch.ones(context_length, context_length))
+print(mask_simple)
+
+Output:
+tensor([[1., 0., 0., 0., 0., 0.],
+        [1., 1., 0., 0., 0., 0.],
+        [1., 1., 1., 0., 0., 0.],
+        [1., 1., 1., 1., 0., 0.],
+        [1., 1., 1., 1., 1., 0.],
+        [1., 1., 1., 1., 1., 1.]])
+
+- Multiply the mask with the attention weights to zero-out results above the diagonal
+
+masked_simple = attn_weights*mask_simple
+print(masked_simple)
+
+- Renormalise the attention weights to sum up to one
+
+row_sums = masked_simple.sum(dim=-1, keepdim=True)
+masked_simple_norm = masked_simple/row_sums
+print(masked_simple_norm)
+
+- Now, we’re ensuring that only unmasked (and therefore appropriate) input tokens are being assessed at a given time, in the order they appear in the input sequence. This is in spite of the fact that softmax uses all of the positions, including future ones, in the denominator.
+- Let’s make this more efficiently — mask the attention scores with negative infinity values before applying softmax
+- Now, we consider the concept of dropout. Randomly selected hidden layer units are ignored during training. Prevents overfitting.
+- Dropout is applied after calculating attention weights, or after applying weights to the value vectors.
+- When training a GPT model, we will use a lower dropout rate of 0.1 or 0.2.
+- An example below, using just a set of '1's
+
+#Apply dropout for attention weights to prevent overfitting
+torch.manual_seed(123)
+dropout = torch.nn.Dropout(0.5)
+example = torch.ones(6, 6)
+print(dropout(example))
+
+Output with dropout value of 0.5:
+
+tensor([[2., 2., 2., 2., 2., 2.],
+        [0., 2., 0., 0., 0., 0.],
+        [0., 0., 2., 0., 2., 0.],
+        [2., 2., 0., 0., 0., 2.],
+        [2., 0., 0., 0., 0., 2.],
+        [0., 2., 0., 0., 0., 0.]])
+
+Output with dropout value of 0.2:
+
+tensor([[1.2500, 1.2500, 1.2500, 1.2500, 1.2500, 1.2500],
+        [1.2500, 1.2500, 1.2500, 0.0000, 1.2500, 1.2500],
+        [0.0000, 1.2500, 1.2500, 1.2500, 1.2500, 1.2500],
+        [1.2500, 1.2500, 0.0000, 1.2500, 1.2500, 1.2500],
+        [1.2500, 0.0000, 0.0000, 1.2500, 0.0000, 1.2500],
+        [1.2500, 1.2500, 0.0000, 0.0000, 1.2500, 0.0000]])
+
+- You can see that when dropout is applied, the values of the remaining elements in the matrix are scaled up in order to maintain normalisation, and overall attention weight balance maintained, during both training and inference phases.
+- Next, we apply dropout to the attention weight matrix itself
+
+- With this done, we can incorporate causal attention and dropout modifications into our SelfAttention Python class. This will be our template for multi-head attention
+- Need first to ensure that the code can handle batches consisting of more than one input, so that CausalAttention (class) can support DataLoader outputs. Then we create our new class:
+
+class CausalAttention(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, qkv_bias=False):
+        super().__init__()
+        #d_in = #Input feature dimensionality for each token (e.g., 512 for GPT models)
+        self.d_out = d_out #Output dimensionality of the transformed token representations.
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias) #Current token focus
+        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias) #What current token is being matched againnst
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias) #What values the tokens communicate
+        self.dropout = nn.Dropout(dropout) #Dropout layer added from SelfAttention_v1 #Randomly zeroinng several tokens
+        self.register_buffer('mask', torch.triu(torch.ones(context_length, context_length), diagonal=1)
+        ) #Values above diag are blocked
+
+    def forward(self, x):
+        b, num_tokens, d_in = x.shape #Set up input tensor's batch size, token number, dimensionality. We transpose dimensions 1 and 2, keeping the batch dimennsion at the first position (0)
+
+        # Each linear layer transforms the input tensor x into keys, queries, and values
+        keys = self.W_key(x)
+        queries = self.W_query(x)
+        values = self.W_value(x)
+
+        attn_scores = queries @ keys.transpose(1, 2) #We transpose dimensions 1 and 2, keeping the batch dimennsion at the first position (0). Computes dot products between queries and keys for every pair of tokens in the sequence
+        attn_scores.masked_fill_(self.mask.bool()[:num_tokens, :num_tokens], -torch.inf) #Prevent attention to future tokens by setting the corresponding attention scores to -inf.. Ops with a trailing underscore are performed in-place, avoiding unnecessary memory copies
+        attn_weights = torch.softmax(attn_scores/keys.shape[-1]**0.5, dim=-1) #Normalisation via converting scores into probabilities.
+        attn_weights = self.dropout(attn_weights)
+
+        context_vec = attn_weights @ values #Each token's context vector is computed as a weighted sum of the values, where the weights are given by the attention probabilities.
+        return context_vec
+
+- We use register_buffer here so that tensors do not have to be on the same device as your model parameters.
+- We have now implemented causal attention in our burgeoning neural network. Now it’s time to implement a multi-head attention model that can implement several causal attention mechanisms in parallel.
+
+Multi-Head Attention
+
+- Now we’re going to extend our causal attention class over multiple heads.
+- First we’ll do this by stacking multiple Causal Attention models. Then we will implement it in a more complicated but computationally efficient way.
+- In a stacked self-attention mechanism, the embedded input tokens remain unchanged. Instead of one value weight matrix and query matrix, however, we have two. We get two context vectors that we combine into a single one later.
+
+class MultiHeadAttentionWrapper(nn.Module):
+    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+        super().__init__()
+        self.heads = nn.ModuleList(
+            [CausalAttention(
+                d_in, d_out, context_length, dropout, qkv_bias
+            )
+                for _ in range(num_heads)]
+        )
+
+    def forward(self, x):
+        return torch.cat([head(x) for head in self.heads], dim=-1)
+
+- If we use this class with two attention heads and an output dimension of two with CausalAttention, we will get a four-dimensional context vector
+
+torch.manual_seed(123)
+context_length = batch.shape[1] #Number of tokens
+d_in, d_out = 3, 2
+mha = MultiHeadAttentionWrapper(d_in, d_out, context_length, 0.0, num_heads=2)
+context_vecs = mha(batch)
+print(context_vecs)
+print("context_vecs.shape:", context_vecs.shape)
+
+Output:
+tensor([[[-0.4519,  0.2216,  0.4772,  0.1063],
+         [-0.5874,  0.0058,  0.5891,  0.3257],
+         [-0.6300, -0.0632,  0.6202,  0.3860],
+         [-0.5675, -0.0843,  0.5478,  0.3589],
+         [-0.5526, -0.0981,  0.5321,  0.3428],
+         [-0.5299, -0.1081,  0.5077,  0.3493]],
+
+        [[-0.4519,  0.2216,  0.4772,  0.1063],
+         [-0.5874,  0.0058,  0.5891,  0.3257],
+         [-0.6300, -0.0632,  0.6202,  0.3860],
+         [-0.5675, -0.0843,  0.5478,  0.3589],
+         [-0.5526, -0.0981,  0.5321,  0.3428],
+         [-0.5299, -0.1081,  0.5077,  0.3493]]], grad_fn=<CatBackward0>)
+context_vecs.shape: torch.Size([2, 6, 4])
+
+- First dimension of the tensor above is 2, as we have two input texts (duplicated, hence why the context vectors are identical). Second dimension refers to the 6 tokens in each input. Third dimension refers to the four-dimensional embedding of each token.
+- We understand how to use the forward function to execute each of these single-head attention modules in sequence. However, we can compute the output for all attention heads simultaneously using matrix multiplication.
+
+Implementing multi-head attention with weight splits
+- We merge MultiHeadAttention and CausalAttention classes into one, with mods for efficiency
+- In MultiHeadAttention, multiple heads are implemented via a list of CausalAttention objects, representing a separate head.
+- Splits input into multiple heads through reshaping the query, key and value tensors ad then combines them.
+
+class MultiHeadAttention(nn.Module):
+    # Class constructor
+    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+        super().__init__()
+
+        # Assert to ensure that output dimension is divisible by number of heads
+        assert (d_out % num_heads == 0), "d_out must be divisible by num_heads"
+
+        # Store output dimension, attenntion head number, dimensionality of each
+        self.d_out = d_out
+        self.num_heads = num_heads
+        self.head_dim = d_out // num_heads
+
+        # Initialise linear transformation layers of queries/keys/values
+        self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias)
+
+        # Output projection after attention applied
+        self.out_proj = nn.Linear(d_in, d_out)
+
+        # Dropout layer for avoiding overfit
+        self.dropout = nn.Dropout(dropout)
+
+        # Mask to apply to scores for causal (self-attention) masking
+        self.register_buffer("mask", torch.triu(torch.ones(context_length, context_length), diagonal=1)
+                             )
+
+        # Application of multi-head attention
+        def forward(self, x):
+            # Batch-size, number of tokens per sequences, embeddings size from input
+            b, num_tokens, d_in = x.shape
+
+            # Apply transformations to produce keys, queries, and values from x
+            keys = self.W_key(x)
+            queries = self.W_query(x)
+            values = self.W_value(x)
+
+            # Reshape each of these for the tensor shape determined above
+            keys = keys.view(b, num_tokens, self.num_heads, self.head_dim)
+            values = values.view(b, num_tokens, self.num_heads, self.head_dim)
+            queries = queries.view(b, num_tokens, self.num_heads, self.head_dim)
+
+            # Transpose to bring num_heads dimension to second axis for easier attention computation
+            keys = keys.transpose(1, 2)
+            queries = queries.transpose(1, 2)
+            values = values.transpose(1, 2)
+
+            # Compute attention scores through matrix mult of queries/keys
+            attn_scores = queries @ keys.traspose(2, 3)
+
+            # Create a boolean mask for the matrix above the diagonal
+            mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
+
+            # Fill masked positions with negative infinity, prevents future tokens being seen
+            attn_scores.masked_fill_(mask_bool, -torch.inf)
+
+            # Normalise attention scores, apply softmax to get weights
+            attn_weights = torch.softmax(
+                attn_scores / keys.shape[-1] ** 0.5, dim=-1)
+
+            # Apply dropout for regularisationn
+            attn_weights = self.dropout(attn_weights)
+
+            # Compute weighted sum of values using attention weights/matrix mult.
+            context_vec = (attn_weights @ values).transpose(1, 2)
+
+            # Rehsape context vector to original shape (batch_size, num_tokens, d_out)
+            context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+
+            # Final output projection to obtain result of multi-head attention
+            context_vec = self.out_prok(context_vec)
+            return context_vec
+
+- The transformations of tensor shapes looks very mathematically complex, but the module above uses the same concept as the MultiHeadAttention wrapper from earlier.
+- In the wrapper, we combined many single-headed attention layers into a single layer. Here, we start with a multi-head layer and then splits it into individual heads
+- The query, key and value tensors are split and transformed for each separate head.
+- Key operation is splitting embeddings output dimensions (d_out) into num_heads and head_dim
+- To put it another way, in the Wrapper, we have inputs x, then two weight matrices (d_out = 2 in each), producing two query matrices. In the class, we have inputs x, fed into a combined weight matrix (d_out = 4). We matrix multiply for a combined query set, which are then split into different query matrices.
+- We have to transpose our tensors carefully so that they eventually have the same shape (batch size, number of heads, number of tokens, and head output dimensions) so that they are properly aligned for batching.
+- Tensor shape parameters like batch size, number of attention heads, number of tokens per sequence, and embeddings size are metadata for the tensor; all tensor values are embeddings themselves corresponding to these params.
+
+- We have used much smaller embedding sizes and attention head numbers to keep the outputs readable here.
+- The smallest GPT model (117 million params) has 12 heads and a context vector embedding size of 768.
+
+Chapter 4 - Implementing a GPT Model From Scratch to Generate Text
+
+- Time to assemble the building blocks of an LLM into a GPT-like model used to generate text
+- In this chapter, we implement the other parts of an LLM architecture beyond data preparation, sampling, and attention mechanisms
+
+Coding an LLM architecture
+- LLMs are large deep neural network architectures designed to generate one new text token at a time
+- Not that complex; many of its components are merely scaled/repeated
+- Now is the time to implement the core structure, including its transformer blocks
+- Will be scaling up embedding dimensions to the size of a small GPT-2 model, with 124 million parameters (trainable weights)
+- Later on, we will focus on loading retrained weights into our implementation, adapting it for larger models
+
+- Parameters = trainable weights = internal variables of the model adjusted/optimised to minimise a specific loss function
+- In a 2,048^2 tensor neural network, each element is a parameter. In this instances the layer would have 4,194,304 params.
+
+- We will start off with the GPT Backbone, a placeholder model
+- Next, we implement further building blocks: Layer normalisation; GELU activation; Feed forward network; Shortcut connections
+- These will be combined into a single Transformer block alongside the MultiHeadAttention module we built earlier
+- These will be use used to implement the untrained GPT model
+
+- First we build up a DummyGPTModel
+- Consists of token and positional embeddings, dropout, a bunch of useless placeholder blocks, a normalisation layer, and an output layer
+- Forward method describes data flow through the model: computes token and positional embeddings, applies dropout, processes data through the transformer blocks, normalises, and produces logits
+- Next, we will initialise with new input data; first, by-election tokenising a batch consisting of two text inputs
+
+import tiktoken
+tokeniser = tiktoken.get_encoding("gpt2")
+batch = []
+txt1 = "Every effort moves you"
+txt2 = "Every day holds a"
+
+batch.append(torch.tensor(tokeniser.encode(txt1)))
+batch.append(torch.tensor(tokeniser.encode(txt2)))
+batch = torch.stack(batch, dim=0)
+print(batch)
+
+- This produces token IDs. This is how it works:
+1. Input text (“Every step moves you”)
+2. Input text is tokenised into individual words
+3. Tokens are turned into embedding vectors of, say, 768 dimensions
+4. Passed through the GPT model
+5. Embedding vectors are returned as output vectors
+6. These are post processed and turned into output text (“Every step moves you forward.”)
+
+- Next, we initialise a 124-million-parameter DummyGPTModel instance and feed it some tokens
+
+torch.manual_seed(123)
+model = DummyGPTModel(GPT_CONFIG_124M)
+logits = model(batch)
+print("Output shape:", logits.shape)
+print(logits)
+
+- The output tensor has two rows, for the two text samples. Each text sample consists of four tokens; each token has a 50,257-dim vector (reflective of the size of the vocabulary)
+- In postprocessinng, these vectors will be reconverted back into token IDs, and then decoded into words
+
+Normalising Activiations with Layer Normalisation
+- Networks have difficulty learning underlying patterns in the data to a degree that would allow accurate predictions/decisions - this is due to vanishing/exploding gradients, leading to difficulty in weight adjustment
+- We implement layer normalisation to improve stability and efficiency. We adjust outputs to have a mean of 0 and variance of 1. This speeds up convergence to effective weights and ensures consistent training.
+- Usually applied before and after multi-head attention module, and before the final output layer.
+
+torch.manual_seed(123)
+batch_example = torch.randn(2, 5)
+layer = nn.Sequential (nn.Linear(5, 6), nn.ReLU())
+out = layer(batch_example)
+#print(out)
+
+- We use ReLU (rectified linear unit), standard activation function in NN. It thresholds negative inputs to 0, meaning all outputs are positive.
+- We use keepdim in subsequent commands to guarantee that the output tensor dims are equivalent to the input tensor dims
+- Next, we apply layer normalisation, involving subtracting the mean ad dividing by the square root of the variance (i.e. the standard deviation)
+
+out_norm = (out - mean) / torch.sqrt(var)
+mean = out_norm.mean(dim=-1, keepdim=True)
+var = out_norm.var(dim=-1, keepdim=True)
+print("Normalised layer outputs:\n", out_norm)
+print("Mean:\n", mean)
+print("Variance:\n", var)
+
+Output:
+Normalised layer outputs:
+ tensor([[ 0.6159,  1.4126, -0.8719,  0.5872, -0.8719, -0.8719],
+        [-0.0189,  0.1121, -1.0876,  1.5173,  0.5647, -1.0876]],
+       grad_fn=<DivBackward0>)
+Mean:
+ tensor([[9.9341e-09],
+        [0.0000e+00]], grad_fn=<MeanBackward1>)
+Variance:
+ tensor([[1.0000],
+        [1.0000]], grad_fn=<VarBackward0>)
+
+- Having applied normalisation step-by-step, we can encapsulate it in a PyTorch module we can use in our GPT model to come
+
+class LayerNorm(nn.Module):
+    def __init__(self, emb_dim):
+        super().__init__()
+        self.eps = 1e-5
+        self.scale = nn.Parameter(torch.ones(emb_dim))
+        self.shift = nn.Parameter(torch.zeros(emb_dim))
+
+    def forward(self, x):
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.scale * norm_x + self.shift
+
+- Variance measures the spread of the features in the last dimension of 𝑥. Variance is critical for normalizing the input so that it has consistent scale and mean, helping stabilize training. Adding 𝜖 avoids numerical issues (like division by zero).Learnable scale and shift parameters ensure that the model retains flexibility after normalization.
+
+Implementing a Feed Forward Network with GELU Activations
+- Now, time to implement a small neural network submodule used in a transformer block
+- Starts with the GELU activation function
+- ReLU is often used in deep learning — simple and effective in the matter to threshold negative inputs to zero
+- GELU (Gaussian Error Linear Unit and SwiGLU (Swish-gated linear unit) are two alternatives. More complex, smoother, incorporating Gaussian and sigmoid-gated linear units respectively
+- GELU can be implemented in several ways, ad ca be defined as x [dot-product] comulative distribution function of the standard Gaussian distribution.
+- Can be cheaper to implement an approximation, via a PyTorch module.
+
+class GELU(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * (x + 0.044715 * torch.pow(x + 3, 3))))
+
+
+gelu, relu = GELU(), nn.ReLU()
+
+# Generate 100 evenly spaced points between -3 and 3 to represent input values for the activation functions.
+x = torch.linspace(-3, 3, 100)
+
+# Apply the GELU and ReLU activation functions to the input values.
+# `gelu(x)` computes the Gaussian Error Linear Unit activation for each value in `x`.
+# `relu(x)` computes the Rectified Linear Unit activation for each value in `x`.
+y_gelu, y_relu = gelu(x), relu(x)
+
+# Create a new figure with a specified size of 8x3 inches to plot the activation functions.
+plt.figure(figsize=(8, 3))
+
+# Loop through the activation functions and their labels to create two subplots.
+for i, (y, label) in enumerate(zip([y_gelu, y_relu], ["GELU", "ReLU"]), 1):
+    # Create a subplot (1 row, 2 columns, i-th plot).
+    plt.subplot(1, 2, i)
+    # Plot the input `x` values against the corresponding activation outputs `y`.
+    plt.plot(x, y)
+    # Set the title of the current subplot to indicate the activation function being plotted.
+    plt.title(f"{label} activation function")
+    # Label the x-axis as "x" (input to the activation function).
+    plt.xlabel("x")
+    # Label the y-axis to indicate the output of the corresponding activation function.
+    plt.ylabel(f"{label} (x)")
+    # Add a grid to the subplot for better visualization of the plot.
+    plt.grid(True)
+
+# Adjust the spacing between subplots to prevent overlapping labels and titles.
+plt.tight_layout()
+
+# Display the figure with the plotted activation functions.
+plt.show()
+
+￼
+- This is the output. ReLU is a piecewise linear function that outputs the input directly if it’s positive; otherwise, it outputs zero
+- GELU is a smooth, non-linear function that approximates ReLU but with a non-zero gradient for negative values.
+- This allows for more nuanced adjustments to the model’s parameters and can mobilise negative input. This makes GELU great for networks with high depth or complex architectures.
+- Next, we’ll use GELU to implement the small neural network module, FeedForward, that will be used in the transformer block later
+
+class FeedForward(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]),
+            GELU(),
+            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+- This is a small NN consisting of two Linear layers and a GELU activation function.
+- In a 124m param GPT model, it receives input batches with tokens with an embedding size of 768 via the GPT_CONFIG_124M dictionary.
+- Say we have an input tensor with shape (2,3,768). The three values represent batch size, number of tokens, and embedding dimensions.
+- First linear layer increases embedding dimension by a factor of 4, to 3072
+- Second linear layer decreases the embedding dimension by a factor of 4, back to 768.
+- FeedForward is crucial in enhancing the model’s ability to learn from and generalise data. It inputs and outputs the same dimensions, but between them it expands them into a higher dimensional space through the first linear layer, followed by nonlinear GELU activation and a contraction back to the original dimension. Allows for a richer representation space.
+- Also simplifies the architecture by enabling stacking of multiple layers with no dim adjustment.
+
+- We have now implemented most of the LLM’s building blocks! Now, it’s time to investigate shortcut connections inserted between different layers in a neural network, for improving training.
+
+Adding shortcut connections
+- Shortcut connections, or skip/residual connections
+- Proposed to mitigate vanishing gradients (where vanishing gradient denotes the phenomenon where the loss function, propagated through the network, is almost flat, meaning weights in earlier layers do not get updated enough or at all
+- Shortcut connection creates an alternative gradient path by skipping one or more layers, by adding output of one layer to the output of a later layer
+
+
+class ExampleDeepNeuralNetwork(nn.Module):
+    #Deep NN with five layers, each consisting of a Linear layer and a GELU activation function
+    #Forward pass, iteratively pass through layers and add shortcuts where shortcut is set to True
+    def __init__(self, layer_sizes, use_shortcut):
+        super().__init__()
+        self.use_shortcut = use_shortcut
+        self.layers = nn.ModuleList([
+            nn.Sequential(nn.Linear(layer_sizes[0], layer_sizes[1]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[1], layer_sizes[2], GELU())),
+            nn.Sequential(nn.Linear(layer_sizes[2], layer_sizes[3]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[3], layer_sizes[4]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[4], layer_sizes[5]), GELU())
+        ])
+
+    def forward(self, x):
+        for layer in self.layers:
+            layer_output = layer(x) #Compute the output of the current layer
+            if self.use_shortcut and x.shape == layer_output.shape: #See if shortcut can be applied
+                x = x + layer_output
+            else:
+                x = layer_output
+        return x
+
+layer_sizes = [3, 3, 3, 3, 3, 1]
+sample_input = torch.tensor ([1., 0., -1.])
+torch.manual_seed(123) #Specifics random seed for initial weights for reproducibility
+model_without_shortcut = ExampleDeepNeuralNetwork(
+    layer_sizes, use_shortcut = False
+)
+
+def print_gradients(model, x):
+    #Code specifies a loss function that computes how close the model output and a user-specified target are
+    output = model(x) #Forward pass
+    target = torch.tensor([0.])
+
+    loss = nn.MSELoss()
+    loss = loss(output, target) #Calculates loss based on how close the target and output are
+
+    loss.backward()
+
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            print(f"{name} has gradient mean of {param.grad.abs().mean().item()}")
+
+
+print_gradients(model_without_shortcut, sample_input)
+
+This produces the output:
+
+layers.0.0.weight has gradient mean of 0.0020389005076140165
+layers.1.0.weight has gradient mean of 0.0013754875399172306
+layers.2.0.weight has gradient mean of 0.004195831250399351
+layers.3.0.weight has gradient mean of 0.005827412009239197
+layers.4.0.weight has gradient mean of 0.01759558729827404
+
+- From this output, it is clear that from weight 4.0 to weight 0, the gradients become smaller and smaller until they almost vanish.
+- A model with skip connections compares more favourably:
+
+torch.manual_seed(123)
+model_with_shortcut = ExampleDeepNeuralNetwork(layer_sizes, use_shortcut=True)
+print_gradients(model_with_shortcut, sample_input)
+
+
+layers.0.0.weight has gradient mean of 0.19594410061836243
+layers.1.0.weight has gradient mean of 0.6174639463424683
+layers.2.0.weight has gradient mean of 0.3319396674633026
+layers.3.0.weight has gradient mean of 0.3728732168674469
+layers.4.0.weight has gradient mean of 1.1185013055801392
+
+- The last layer has a larger gradient than the others, but the value stabilises as we progress towards layer 1. Gradient flow has been ensured, which is key for training our model
+
+Connecting attention and linear layers in a transformer block
+- Time to implement the transformer block, a fundamental building block of GPT/LLM architectures
+- This block, repeated 12 times in the 124-param GPT-2 architecture, combines multihead attention, layer normalisation, dropout, feed forward, GELU activations
+- When a block processes an input sequence, each element in the sequence is represented by a fixed-size vector of 768 dimensions
+- Operations within the block, like multi-head attention and feed forward layers, to transform the vectors while preserving dimensionality.
+
+class TransformerBlock(nn.module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.att = MultiHeadAttention(
+            d_in=cfg["emb_dim"],
+            d_out=cfg["emb_dim"],
+            context_length=cfg["context_length"],
+            num_heads=cfg["n_heads"],
+            dropout=cfg["drop_rate"],
+            qkv_bias=cfg["qkv_bias"])
+        self.ff = FeedForward(cfg)
+        self.norm1 = LayerNorm(cfg["emb_dim"])
+        self.norm2 = LayerNorm(cfg["emb_dim"])
+        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop_shortcut(x)
+        x = x + shortcut
+
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop_shortcut(x)
+        x = x + shortcut
+        return x
+
+- Defines a block class in PyTorch inclusive of a multi-head attention mechanism and feed forward, configured based on a provided configuration dictionary (cfg)
+- Layer normalisation is applied before each of these two components, dropout is applied after them to regularise the model and prevent overfitting.
+- Implements the forward pass, with each component followed by a shortcut connection adding the input of a block to its output
+- Instantiating an instance for testing works like so:
+
+torch.manual_seed(123)
+x = torch.rand(2, 4, 768)
+block = TransformerBlock(GPT_CONFIG_124M)
+output = block(x)
+
+print("Input shape:", x.shape)
+print("Output shape:", output.shape)
+
+Output:
+Input shape: torch.Size([2, 4, 768])
+Output shape: torch.Size([2, 4, 768])
+
+- The block maintains the input dims in output
+- Preservation of shape thus is a critical aspect of transformer design. Enables effective application across a range of sequence-to-sequence tasks, with all output vectors corresponding to input vectors
+- However, the output is a context vector that encapsulates information from the entire input sequence. Thus, while physical dimensions of sequence remain the same, the content is modified to integrate contextual information from across the sequence.
+- We now have all the building blocks required to implement the GPT architecture.
+
+——————————————————————————————————————————————————————————
+
+
+——————————————————————————————————————————————————————————
+
+Questions:
+
+1. When passing through the fully connected layer, how do the 5 inputs become 6 features? Is it via dot product of each input by the weights, as it would be in a regular self-attention mechanism?
+
+ChatGPT
+Excellent question, Maxi! The transformation from 5 inputs to 6 features in a fully connected layer (nn.Linear) is not quite the same as a dot product in self-attention, but the principle is related. Here's a detailed breakdown:
+
+How the Transformation Works in nn.Linear
+When you pass a tensor through a fully connected layer (nn.Linear), the 5 inputs are transformed into 6 outputs via matrix multiplication with the weight matrix and addition of a bias vector. This operation computes a weighted sum of the input features for each of the 6 output features.
+
+￼
+
+Adding the Bias: After the weighted sum, a bias term 𝑏 is added element-wise to each output feature. This gives the final linear transformation output:
+
+How This Differs From Self-Attention
+In self-attention mechanisms, the dot product serves a different role. Instead of transforming the inputs into a new feature space, the dot product is used to compute the similarity between queries. In contrast, nn.Linear is a pure transformation mechanism that maps input features to a new feature space, without computing token-to-token similarities.
+
+Why Do the Inputs Expand to 6 Outputs?
+
+The increase from 5 to 6 features is controlled by the number of output features specified in nn.Linear(5, 6).
+
+This operation allows the model to:
+
+- Increase Dimensionality:Project the input into a higher-dimensional space to capture more complex patterns.
+
+- Learn Feature Transformations: The weights and biases are trainable, meaning the model learns how to combine and transform the 5 input features to produce 6 meaningful outputs during training.
+
+
+
 

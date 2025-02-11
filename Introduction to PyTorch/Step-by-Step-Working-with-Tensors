@@ -1,0 +1,676 @@
+
+
+
+Understanding Tensors
+
+- Tensors are as mathematical concept that generalises vectors and matrices from one set of dimensions to a higher one
+- They are characterised by their order (or rank), which provides the number of dimensions
+- A scalar, a single number, has a tensor rank of . A vector (two numbers) has a tensor rank of 1. A matrix has a tensor rank of 2.
+- Tensors act as data containers. They hold multidimensional data where each dimension represents a different feature.
+- PyTorch adds an automatic differentiation for simplifying computing gradients.
+- Tensors can be created like so:
+
+Import torch
+tensor0d = torch.tensor(1)						Creates scalar from Python integer
+tensor1d  = torch.tensor([1,2,3])					Creates 1d tensor (vector)
+tensor2d = torch.tensor([1,2], [3,4])				Creates 2d tensor from nested Python list
+tensor3d = torch.tensor([1,2], [3,4], [5,6], [7,8]  	Creates 3d tensor from nested Python list
+
+Tensor Data Types
+
+- PyTorch adopts 64-bit integer type from Python
+- PyTorch will however create tensors with a 32-bit precision given Python floats. This balances precision and computational efficiency. 32-bit is sufficient for deep learning while consuming less memory/comp resources.
+
+- A few common PyTorch tensor operations includes the following
+
+tensor2d = torch.tensor([[1,2,3], [4,5,6]])
+print(tensor2d)
+
+…which prints
+
+tensor([[1,2,3], [4,5,6]])
+
+print(tensor2d.shape)
+
+…which prints
+
+torch.Size([2,3]
+
+- This output means that the tensor has 2 rows and 3 columns We can revise the shape using:
+
+print(tensor2d.reshape(3,2))
+Or
+print(tensor2d.view(3,2))
+
+…which prints
+
+tensor([ [1,2], [3,4], [5,6])
+
+- Lots of duplicate means to do the same operation in PyTorch, owing to demand for syntax that was similar to Numpy
+-  .view() and .reshape(), for instance, handle memory layout slightly differently. view requires original data to be contiguous, while .reshape will work regardless.
+- We can use .T to transpose a tensor, which means flipping it along the diagonal
+
+print(tensor2d.T)
+
+which prints
+
+tensor([[1, 4], [2, 5], [3,6]])
+
+- And finally the common way to multiply two matrices in PyTorch is the .matmul method or the @ method
+
+print(tensor2nd.matmul(tensor2d.T))
+or
+print(tensor2d @ tensor2d.T)
+
+which prints
+
+tensor([[14, 32], [32, 77]])
+
+Seeing models as computation graphs
+
+- PyTorch’s automatic differentiation engine (AutoGrad) computes gradients automatically
+- Computational graph is a direct graph for visualising mathematical expressions
+- It lays out the sequence of calculations required to compute the output of a neural network, required to calculate the required gradients for back propagation, which is our main training algorithm
+- Let’s look at the following exam[please to illustrate a the concept of a computation graph. It implements the forward pass (prediction step) of a logistic regression classifier, or single-layer NN
+
+import torch.nn.functional as F
+
+y= torch.tensor([1.0]) #True label
+x1= torch.tensor([1.1]) #Input feature
+w1‎ = torch.tensor([2.2]) #Weight parameter
+b= torch.tensor([0.0]) #Bias unit
+z= x1 * w1 + b
+a= torch.sigmoid(z)
+Loss = F.binary_cross_entropy(a, y)
+
+- A logistic regression forward pass, as a computation graph, sees input feature x1 being multiplied by model weight w1, and then passed through an activation function after being weighted with bias.
+
+Computational Graphs
+- The most common way of computing the loss gradients in a computation graph involves applying the chain rule from right to left, also known as backpropagation. We start from the output layer and work back through the network to input. We do this to compute the gradient of the loss with respect to each parameter (weights and biases), and we use this information to update the parameters during training.
+- The loss function determines the difference between a predicted model output and the actual output - large differences mean the model performed poorly, and small differences point to good performance. Backpropagation is then used to determine how much each weight contributed to the loss, where positive gradients lead to a decrease in the weight, and negative gradients to an increase in the weight. The update is done via stochastic gradient descent, wherein the new value of the parameter is equal to its prior value - the learning rate as that learning rate is multiplied by the gradient of the loss with respect to that parameter.
+
+Partial Derivatives and Gradients
+- Partial derivates measure the rate at which a function changes with respect to a variable
+- A gradient is a vector containing all the partial derivatives of a multivariate function (i.e. has more than one variable at input)
+
+- Let’s take a look at how we can compute gradients via autogrid
+
+import torch.nn.functional as F
+from torch.autograd import grad
+
+y= torch.tensor([1.0])
+x1= torch.tensor([1.1])
+w1‎ = torch.tensor([2.2], requires_grad=True)
+b= torch.tensor([0/0], requires_grad=True)
+
+z = x1 * w1 + b
+a = torch.sigmoid(z)
+
+loss = F.binary_cross_entropy(a, y)
+
+grad_L_w1 ‎ = grad(loss, w1, retain_graph=True)
+grad_L_b grad(loss, b, retain_graph=True)
+
+- The resulting values of the loss given model params are
+
+print(grad_L_w1)
+print(grad_L_b)
+
+Which outputs
+
+(Tensor([-.0898]), )
+(tensor([-0.0817]), )
+
+- PyTorch provides automations so we don’t need to use grad manually
+- For instance, we can call .backward on the loss, to compute gradients of all the leaf nodes in the graph
+
+loss.backward()
+print(w1.grad)
+print(b.grad)
+
+- This will produce the same outputs
+
+Implementing Multilayer Neural Networks with PyTorch
+- Let’s think of a multilayer perceptron. It has 10 input units in its input layer.
+- Then, there are six nodes and one bias unit in its 1st hidden layer
+- The edges represent weight connections
+- Then, there are four nodes and a node representing the bias unit in its 2nd hidden layer
+- Then we have three output units
+
+- The above is a scaled-down model of an MNN architecture
+- We will define our own architecture using the torch.nn.Module class
+- Within this subclass we define network layers in the __init__ constructor and specify how the layers interact in the forward pass (i.e. how it passes through the layers and is made into a computation graph)
+- The following code will implement a perceptron with two hidden layers to demonstrate how the Module class works
+
+class NeuralNetwork(torch.nn.Module):
+	def __init__(self, num_inputs, num_outputs) #Coding this allows us to reuse the same coefficient for datasets with a different number of features and classes
+		super().__init__()
+
+		self.layers = torch.nn.Sequential(
+
+			#1st hidden layer
+			torch.nn.Linear(num_inputs, 30), #Number of input/output nodes as arguments
+			torch.nn.ReLU(), #Nonlinear activation functions are placed between hidden layers
+
+			#2nd hidden layer
+			torch.nn.Linear(30, 20), #No output nodes in one layer must match inputs in next layer
+			torch.nn.ReLU(),
+
+			#output layer
+			torch.nn.Linear(20, num_outputs),
+
+		)
+
+	def forward(self, x):
+		logits = self.layers(x)
+		return logits #Outputs of last layer are called logits
+
+- We can then instantiate the new NN as follows:
+
+model= NeuralNetwork(50,3)
+print(model)
+
+This prints:
+
+NeuralNetwork(
+	(layers) : Sequential(
+		(0): Linear(in_features=50, out_features=30, bias=True)
+		(1): ReLU()
+		(2): Linear(in_features=30, out_features=20, bias=True)
+		(3): ReLU()
+		(4): Linear(in_features=20, out_features=3, bias=True)
+	)
+)
+
+- We use the Sequential class when we implement the NeuralNetwork class. Sequential is not required but can make life easier when we have multiple layers that need to execute in order.
+- - Checking the total number of trainable parameters shows the following:
+
+num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(“Total number of trainable model parameters:”, num_params)
+
+Which prints:
+
+Total number of trainable model parameters; 2213
+
+- Each parameter for which requires_grad=True is trainable and will be updated during training
+- These trainable params are in the torch.nn.Linear layers. This layer multiplies inputs with a weight matrix and bias vector, in the feed-forward stage
+- As the matrix is very large, we can use .shape to show its dimensions
+
+print(model.layers[0].weight.shape)
+
+Which prints:
+
+torch.Size([30,50])
+
+- Model weights are initialised with small random numbers which differ each time the network is instantiated
+- This is design to break symmetry during training, otherwise the nodes would perform the same ops/updates during backpropagation, and the network will not learn anything
+- We can prevent this and make each initialisation of numbers reproducible by seeding PyTorch’s random number generator through manual_seed:
+
+torch.manual_seed(123)
+model=NeuralNetworkk(50,3)
+print(model.layers[0].weight)
+
+- We can see how this is then used on the forward pass:
+
+torch.manual_seed(123)
+x= torch.rand((1,50))
+out=model(x)
+print(out)
+
+Which outputs
+
+tensor([[-0.1262, 0.1080, -0.1792]], grad_fn=<AddmBackward0>)
+
+- In the code above, we generate a single random training example x as a toy input (our network expecting 50-dimensional feature vectors all the while) and fed it to the network, returning three scores
+- Forward pass refers to calculating outpu tensors from input tensors. This means passing input data through NN layers to the output layer.
+- The three numbers printed above correspond to a score assigned to each output node. grad_fn and the value re[presents the last-used functrion to compute a variable in the computational graph
+- This one in particular means that the tensor we are inspecting was created via matrix multiplication and addition. PyTorch will use this information when it computes gradients during backpropagation
+
+- We can use a network without training or backpropagation - e.g. for prediction after training - we don’t need the computational graph. It’s wasteful, performing unnecessary computations and consuming memory.
+- So, when using a model for inference vs. Training, the best practice is to use torch.no_grad() context manager.. PyTorch will know gradients don’t need to be kept track of
+
+with torch.no_grad():
+	out= model(x)
+print(out)
+
+tensor([[-0.1262, 0.1080, -0.1792]])
+
+- In PyTorch, common practice says we code models to return logits without passing them to a nonlinear activation function
+- Why? Because PyTorch’s loss functions combine softmax (or sigmoid for binary classification) operation with negative log-likelihood loss in one class
+- This is numerically efficient and stable
+
+Setting up Efficient Data Loaders
+- Before training is possible, we must build data loaders that can be efficiently iterated over during training.
+- We start off with a Custom Dataset Class and instantiate it. Using the Dataset class we then create two different Dataset objects - Trainin gna dTest.
+- Each Dataset is fed to a loader. Each loader handles dataset shuffling, assembling data records into batches
+- We can start by creating a simple toy dataset of five training examples with two features each.
+
+X_train = torch.tensor([
+	[-1.2, 3.1],
+	[-0.9, 2.9],
+	[-0.5, 2.6],
+	[2.3, -1.1],
+	[2.7, -1.5]
+])
+y_train = torch.tensor([0, 0, 0, 1, 1])
+
+X_test = torch.tensor([
+	[-0.8, 2.8],
+	[2.6, -1.6],
+])
+y_test = torch.tensor([0, 1])
+
+- Next, we create a custom dataset class, ToyDataset, by subclassing from PyTorch’s Dataset parent class, as shown in the following listing:
+
+from torch.utils.data import Dataset
+
+class ToyDataset(Dataset):
+	def __init__(self, x, y):
+		self. features = X
+		self.labels = y
+
+	def __getitem__(self, index): #Instructions for retrieving exactly one data record, corresponding label
+		one_x = self. features(index)
+		one_y = self. labels(index)
+		return one_x, one_y
+
+	def __len__(self):
+		return self.labels.shape[0]
+
+train_ds = ToyDataset(X_train, y_train)
+rest_ds = ToyDataset(X_test, y_test)
+
+- Here, we’re instantiating our DataLoader
+- In PyTorch, the three main components of a custom Dataset class are the __init__ constructor, the __getitem__ method, the __len__ method
+- In __init__ we are setting up attributes (file paths, objects etc) we’ll harness later
+- In __getitem__ we set instructions for returning one item from the dataset via an index
+- In __len__, we give instructions for retrieving the length of the dataset
+
+- Now, with our dataset, we can use DataLoader to sample from it
+
+from torch.utils.data import DataLoader
+
+torch.manual_seed(123)
+
+train_loader = DataLoader(
+	dataset = train_ds, #The Toydataset instance from earlier is input to our loader
+	batch_size = 2,
+	shuffle=True,
+	num_workers = 0 #Num of background processes
+)
+
+test_loader = DataLoader(
+	dataset = test_ds,
+	batch_szie = 2,
+	shuffle=False,
+	num_workers=0
+)
+
+- We can now iterate over the loader. The iteration over test_loader works the same way
+
+For idx, (x,y) in enumerate(train_loader):
+	print(f”Batch {idx+1}:”, x, y)
+
+The result will be a bunch of tensors
+
+- We can see that train_loader iterates over the training dataset and visits each example once. This is a training epoch.
+- Since we seeded the random number generator using manual_seed, we should get the same shuffling order of training examples
+- However, upon a second iteration, the shuffling order will change. This means the update cycles do not get repetitive during training
+- We specified a batch size of 2 here, but the third batch has just one example as we have 5 training examples, which is not divisible by 2. Smaller batches can equal disturbed convergence during training. Can be mitigated as follows:
+
+train_loader = DataLoader(
+	dataset=train_ds,
+	batch_size=2,
+	shuffle=True,
+	num_workers=0,
+	drop_last=True
+)
+
+This will drop the last batch in each epoch, ensuring batch sizes remain constant
+
+- num_workers is crucial for parallelising data loading and preprocessing
+- When set to 0, data loading will be done in a the main process, not separately
+- This can, however, lead to substantial slowdown during training when training larger networks on a GPU. Instead of focusing purely on processing of DLM, the CPU must also load an preprocess
+- If workers is set above 1, then multiple worker processes are launched to load data
+- It is only necessary to set num_workers above 1 when dealing with very large datasets. In fact, spinning up workers without need can slow down treatment of small datasets
+- Setting num_workers=4 usually leads to optimal outcomes on real world datasets
+
+A Typical Training Loop
+- Time to train a neural network on the toy dataset
+
+import torch.nn.functional as F
+
+torch.manual_seed(123)
+model= NeuralNetwork(num_inputs=2, num_outputs=2)
+optimiser = torch.optim.SGD(
+	model.parameters(), lr=0.5
+)
+
+num_epochs = 3
+for epoch in range(num_epochs):
+	model.train()
+
+	for batch_idx, (features, labels) in enumerate(train_loader):
+		logits = model(features)
+
+		loss = F.cross_entropy(logits, labels)
+
+		optimiser.zero_grad()
+		loss.backward()
+		optimiser.step()
+
+		##LOGGING
+		print(f”Epoch: {epoch+1:03d}/{num_epochs:03d}”
+			f” | Batch {natvh_idx:03d}/{len(train_loader) : 03d}”
+			f” | Train Loss: {loss:.2f}”)
+
+	model.eval()
+	#Insert optional model evaluation code
+
+- Running this code will see than loss reaches 0 after three epochs, a sign that the model converged from the training set
+- Our model has two inputs and two outputs as this matches our toy dataset - two input features and two class labels to predict
+- We use stochastic gradient descent optimiser with a 0.5 learning rate. Ideally, we want a learning rate such that loss converges after a certain number of epochs
+- In practice, we might use a third dataset, a validation dataset, to find optimal hyper parameter (learning rate, epoch) settings
+- Similar to a test set, the validation set can be used multiple times to finesse model settings
+- We can calculate the number of params this model contains bysummimg the first hidden layer (2 inputs x 30 hidden units + 30 bias units) with the second hidden layer (30 incoming units x 20 nodes x 20 bias units) with the output layer (20 incoming nodes x 2 output nodes + 2 bias units)
+- We also introduced new settings - model.train() and model.eval(), which are used to switch model modes. Necessary for components that behave differently during training and inference
+- We pass logits directly into the cross-entropy loss functions to apply the softmax function, before calling loss.backward() to calculate gradients in the computation graph
+- We then use optimiser to update the model params based on the gradients. To prevent undesired gradient accumulation, we include optimiser.zero_grad() to reset gradients to 0 before each round.
+
+- We can now use the model to make predictions:
+
+model.eval()
+with torch.no_grad():
+	outputs = model(X_train)
+print(outputs)
+
+tensor([[ 2.8569, -4.1618],
+        [ 2.5382, -3.7548],
+        [ 2.0944, -3.1820],
+        [-1.4814,  1.4816],
+        [-1.7176,  1.7342]])
+
+
+- To obtain the class membership probabilities* we then softmax the function
+
+torch.set_printoptions(sci_mode=False)
+probas= torch.softmax(outputs, dim=1)
+print(probes)
+
+tensor([[    0.9991,     0.0009],
+        [    0.9982,     0.0018],
+        [    0.9949,     0.0051],
+        [    0.0491,     0.9509],
+        [    0.0307,     0.9693]])
+
+- If we look at the first row in the preceding code output, we see that the first value shows that the training example has a 99.91% probability of belonging to class 0 and a 0.09% probability of belonging to class 1
+- We can convert these values into class label predictions using PyTorch’s argmax function, which returns the index position of the highest value in each row if we set dim=1 (dim=0 will return the highest value per column)
+
+predictions= torch.argmax(probas, dim=1)
+print(predictions)
+
+tensor([0, 0, 0, 1, 1])
+
+- We ca also just apply argmax function to the logits to find the softmax probabilities
+- We’ve computed predicted labels for the training dataset here. As the training dataset is relatively small, we can compare it to the training labels by eye and see that the model is 100% correct
+- We can double-check this using the == comparison operator
+
+Predictions == y_train
+
+tensor([True, True, True, True, True])
+
+torch.sum(predictions == y_train)
+[Correct Number of Predictions =] 5
+
+- To generalise the computation of the prediction accuracy, we can implement a compute_accuracy function
+
+def compute_accuracy(model, dataloader):
+
+	model=model.eval()
+	correct= 0.0
+	total_examples = 0
+
+	for idx, (features, labels) in enumerate(dataloader):
+		with torch.no_grad():
+			logits= model(features)
+
+		predictions = torch.argmax(logits, dim=1)
+		compare = labels == predictions
+		correct +‎ = 0torch.sum(compare)
+		total_examples += len(compare)
+
+	return(correct/total_examples).item()
+
+- The code iterates over a data loader to compute the number and fraction of correct predictions
+- When we work with large datasets, we typically can only call th model on a small part of the dataset due to memory limitations
+- The compute_accuracy function here is a general method that scales to datasets of arbitrary size
+- We can then apply the function to the training and test sets:
+
+print(compute_accuracy(model, train_loader))
+print(compute_accuracy(model, test_loader))
+
+1.0
+1.0
+
+*Explaining class membership probabilities:
+
+A class in LLMs is a probable next token. Let’s say an LLM is predicting the next token after:
+"The capital of France is"
+It might compute logits (raw scores) like:
+* "Paris" → 5.2
+* "London" → 2.1
+* "Berlin" → 0.9
+Applying softmax to these values converts them into class membership probabilities:
+* "Paris" → 0.89 (highest probability, most likely prediction)
+* "London" → 0.07
+* "Berlin" → 0.04
+
+Saving and Loading Models
+- Having trained our model, we’ll save it to use it later
+- This is how we save and load models in PyTorch
+
+torch.save(model.state_dict(), “model.pth”)
+
+- The model’s state_dict is a Python dictionary object that maps each layer in the model to its trainable params
+- model.pth is an arbitrary filename
+- We can then restore it from disk
+
+model=NeuralNetwork(2,2)
+model.load_state_dict(torch.load(“model.pth”))
+
+- torch.load reads the file and reconstructs the object containing the params, while model.load etc. applies them to the model
+
+Optimising Training Performance with GPUs
+- Now we’ll consider how to use GPUs to accelerate deep neural network training
+- Modifying the training loop to run optimally on a GPU is relatively simple and only requires changing three lines of code
+- Let’s presume we have installed a GPU-compatibel version of PyTorch, and want to double check our runtime supports GPU computing. We do so with this:
+
+print(torch.cuda.is_available())
+
+True
+
+- If we have two tensors we can add, the computation will be carried out on the CPU by default
+
+tensor_1 = torch.tensor([1., 2., 3.])
+tensor_2 = torch.tensor([4., 5., 6.])
+
+print(tensor_1 + tensor_2)
+
+tensor([5., 7., 9.])
+
+- We can now use the .to() method to transfer the tensors to the GPU and perform the calculations there:
+
+tensor_1 = tensor_1.to("cuda")
+tensor_2 = tensor_2.to("cuda")
+
+print(tensor_1 + tensor_2)
+
+- The tensor now includes device information. You can select among GPUs if your machine hosts multiple GPUs, via .to(“cuda:0”), .to(“cuda:1”) etc
+- However, all tensors must be on the same device or failure will result
+
+tensor_1 = tensor_1.to("cpu")
+print(tensor_1 + tensor_2)
+
+---------------------------------------------------------------------------
+RuntimeError                              Traceback (most recent call last)
+/tmp/ipykernel_2321/2079609735.py in <cell line: 2>()
+      1 tensor_1 = tensor_1.to("cpu")
+----> 2 print(tensor_1 + tensor_2)
+
+RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!
+
+Single GPU Training
+- Now we are familiar with transferring tensors, we can modify the training loop to run on a GPU
+
+torch.manual_seed(123)
+model= NeuralNetwork(num_inputs=2, num_outputs=2)
+
+device= torch. device(“cuda”)
+model = model. to(device)
+
+optimiser= torch.optim.SGD(model.parameters(), lr=0.5
+
+num_epochs = 3
+
+for epoch in range(num_epochs):
+	model.train()
+	for batch_idx, (features, labels) in enumerate(train_loader):
+		features, labels = features.to(device), labels.to(device)
+		logits = model(features)
+		loss = F.cross_entropy(logits, labels) #Loss function
+
+		optimiser.zero_grad()
+		loss.backward()
+		optimiser.step()
+
+		#LOGGING
+		print(f”Epoch: {epoch+1:0d3}/{num_epochs:03d}”
+			 f” | Batch {batch_idx:03d}/{len(train_loader): 03d}”
+			 f” | Train/Val Loss: {loss: .2f}”)
+
+	model.eval()
+
+Epoch: 001/003 | Batch 000/002 | Train/Val Loss: 0.75
+Epoch: 001/003 | Batch 001/002 | Train/Val Loss: 0.65
+Epoch: 002/003 | Batch 000/002 | Train/Val Loss: 0.44
+Epoch: 002/003 | Batch 001/002 | Train/Val Loss: 0.13
+Epoch: 003/003 | Batch 000/002 | Train/Val Loss: 0.03
+Epoch: 003/003 | Batch 001/002 | Train/Val Loss: 0.00
+
+- We can modify the statement so that the code executes on a CPU if a GPU is not available
+
+device = torch.device("cuda” if torch.cuda.is_available() else “cpu”)
+
+- On MacOS, with an Apple Silicon chip (M1, M2, M3), we change via the following:
+
+device = torch.device(
+	“mps” if torch.backends.mps.is_available() else “cpu”
+)
+
+Training with Multiple GPUs
+- Distributed training means dividing model training across multiple GPUs and machines
+- This can reduce training time significantly
+- Critical to experimental stages of model development, where fine-tuning will need many training iterations
+
+- Distributed training is handled via PyTorch’s Distributed-DataParallel(DDP) strategy. This splits input data across available devices and processes them simultaneously
+- PyTorch launches separate processes on each GPU, each of which keeps a copy of the model; copies are synchronised during training
+- In every training iteration, each model in each GPU will receive a mini batch from the data loader. We can use a DistributedSampler to ensure that each one receives a different, non-overlapping batch when using DDP.
+- The different models return different logits as outputs and compute different gradients on the backward pass
+- The gradients are averaged/sync’d to update the models, to ensure non-divergence
+- Time efficiency scales linearly with GPUs added
+- DDP does not function properly in interactive Python environment like notebooks, which don’t handle multiprocessing like a regular Python environment does All code should be executed script-wise
+
+- Following code will focus on ore parts of the code to be adjusted for DDP. Full standalone multi-GPU script can be found in the https://github.com/rasbt/LLMs-from-scrarch repo
+
+Import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+
+- PyTorch’s multiprocessing submodule contains functions like multiprocessing.spawn which will spawn multiple processes and apply a function to multiple inputs in parallel
+- We will use it to spawn one training process per GPU
+- Spawning different processes for training will require division of the daraset among the different processes, for which we use DistributedSampler
+
+- init_process_group and destroy_process_group are used to initialise and quit distributed training mods
+- init_process_group is used to initialise a process group for each process in the distributed setup, while destroy_… can ungroup the process group and release its resources
+
+
+def ddp_setup(rank, world_size):
+	os.environ[“MASTER_ADDR”] = “localhost”
+
+	os.environ[“MASTER_PORT”] = “12345” #Any free port on the machine
+	init_process_group(
+		backend="nccl”, #NVidia Collective Communication Library
+		rank=rank, #Index of the GPU we want to use
+		world_size=world_size
+	)
+	torch.cuda.set_device(rank) #Sets current GPU device on which tensors will be allocated/operations performed
+
+def prepare_dataset():
+	# insert dataset preparation code
+	train_loader = DataLoader(
+		dataset=train_ds,
+		batch_size=2,
+		shuffle=False, #Distributed sampler takes care of shuffling flow
+		pin_memory=True, #Enables faster memory transfer when training on GPU
+		drop_last=True,
+		sampler=DistributedSampler(train_ds) #Splits dataset into non-overlapping subsets for each process
+	)
+	return train_loader, test_loader
+
+def main(rank, world_size, num_epochs):
+	ddp_setup(rank, world_size)
+	train_loader, test_loader = prepare_dataset()
+	model = NeuralNetwork(num_inputs=2, num_outputs=2)
+	model.to(rank)
+	optimiser = torch.optim.SGD(model.parameters(), lr=0.5)
+	model = DDP(model, device_ids=[rank])
+	for epoch in range(num_epochs):
+		for features, labels in train_loader:
+		 	feature, labels = features.to(rank), labels.to(rank)
+			#Insert model prediction and backpropagation code
+			print(f”[GPU{rank}] Epoch: {epoch+1:03d}/{num_epochs:03d}”
+				 f” | Batchsize {labels.shape[0]:03d}”
+				 f” | Train/Val Loss: {loss: .2f}”)
+
+	model.eval()
+	train_acc = compute_accuracy(model, train_loader, device=rank)
+	print(f”[GPU{rank}] Training accuracy”, train_acc)
+	test_acc = compute_accuracy(model, test_loader, device=rank)
+	print(f”[GPU{rank}] Test Accuracy”, test_acc)
+	destroy_process_group()
+
+If __name__ == “__main__”:
+	print(“Number of GPUs available:”, torch.cuda.device_count())
+	torch.manual_seed(123)
+	num_epochs ‎ = 3
+	world_size = torch.cuda.device_count()
+	mp.spawn(main, args(world_size, num_epochs), nprocs=world_size)
+
+
+- We have a __name__ = “__main__” clause here with code to be executed scriptwise. No module importing
+- Code first prints number of available GPUs
+- Then spawns new processes
+- Spawn function launches a process per GPU, where world_size is the number of available GPUs
+- spawn launches the code in the main function with additional args
+- Sets up the distributed environment via ddp_setup loading the training and test sets, the model architecture, and carries out the training
+- Model and data are transferred to the target device vis .to(rank) which refers to GPU device ID
+- Model is wrapped by DDP, syncing the gradients between the GPUs during training
+- After training and eval, the training is executed and resources freed up
+- The DistributedSampler sends different subsamples of the training data to the GPUs
+- ddp_setup sets main node’s address to allow for communication between processes, initialisation of the process group in the NCCL backend, and sets the rank/world size
+
+Selecting Available GPUs on a Multi-GPU Machine
+- CUDA_VISIBLE_DEVICES environment variable can be used to restrict the number of GPUs allowed into service
+- Instead of python some_script.py, you’d run the following terminal command:
+
+CUDA_VISIBLE_DEVICES=0 python some_script.py
+
+- This would run the script on a single GPU.
+- If you want to run the script on just the first and third of your available GPUs, the command is the following:
+
+CUDA_VISIBLE_DEVICES=0, 2 python some_script.py
+
+- If we launch the script with the terminal command python ch02-DDP-script.py, if we are on a single-GPU machine, we will see the following output
+
+

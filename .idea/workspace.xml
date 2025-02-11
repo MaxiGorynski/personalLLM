@@ -4,7 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c3d0c6c2-e04d-4a36-94d8-6a147a6ddc8f" name="Changes" comment="" />
+    <list default="true" id="c3d0c6c2-e04d-4a36-94d8-6a147a6ddc8f" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/DDP.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Introduction to PyTorch/PyTorch_Exercises.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Introduction to PyTorch/Step-by-Step-Working-with-Tensors" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Step-by-Step.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Step-by-Step.txt" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -33,12 +39,20 @@
   &quot;keyToString&quot;: {
     &quot;Python.LLM.executor&quot;: &quot;Run&quot;,
     &quot;Python.Tokeniser_V2.executor&quot;: &quot;Run&quot;,
+    &quot;Python.swarm.executor&quot;: &quot;Run&quot;,
+    &quot;Python.swarm_demo.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;last_opened_file_path&quot;: &quot;/Users/supriyarai/Code/personalLLM&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/Introduction to PyTorch" />
+      <recent name="$PROJECT_DIR$/Experimental_Material/AI Agents/Demo1MealPlan" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
