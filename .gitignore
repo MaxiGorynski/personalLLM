@@ -1,0 +1,4 @@
+gpt2
+gpt2/*.pth
+model.pth
+model_and_optimiser.pth
