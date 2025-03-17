@@ -1530,6 +1530,127 @@ def random_split(df, train_frac, validation_frac):
 
 train_df, validation_df, test_df = random_split(balanced_df, 0.7, 0.1)
 
+'''
 train_df.to_csv("train.csv", index=None)
 validation_df.to_csv("validation.csv", index=None)
-test_df.to_csv("test_csv", index=None)
+test_df.to_csv("test.csv", index=None)
+'''
+
+import torch
+from torch.utils.data import Dataset
+
+
+class SpamDataset(Dataset):
+    #This is a custom PyTorch Dataset class for handling spam/ham text data.
+
+    def __init__(self, csv_file, tokeniser, max_length=None, pad_token_id=50256):
+        #csv_file: path to the CSV containing spam/ham text and labels.
+        #tokeniser: a tokenizer (e.g., GPT-2 tokenizer) to encode text into token IDs.
+        #max_length: max token length for each encoded text. If None, it will auto-compute.
+        #pad_token_id: token ID used to pad shorter sequences (default: 50256, typical GPT-2 padding).
+
+        self.data = pd.read_csv(csv_file)  #Load CSV into a pandas dataframe.
+
+        #Encode all text rows into token IDs.
+        self.encoded_texts = [tokeniser.encode(text) for text in self.data["Text"]]
+
+        if max_length is None:
+            #If no max_length specified, auto-compute based on longest encoded sample.
+            self.max_length = self._longest_encoded_length()
+        else:
+            self.max_length = max_length
+
+            #Truncate texts that are longer than max_length.
+            self.encoded_texts = [
+                encoded_text[:self.max_length]
+                for encoded_text in self.encoded_texts
+            ]
+
+            #Pad shorter texts up to max_length.
+        self.encoded_texts = [
+            encoded_text + [pad_token_id] * (self.max_length - len(encoded_text))
+            for encoded_text in self.encoded_texts
+        ]
+
+    def __getitem__(self, index):
+        #Standard PyTorch Dataset method to get a single data point.
+        encoded = self.encoded_texts[index]
+        label = self.data.iloc[index]["Label"]
+
+        #Returns:
+        #Encoded text as tensor (LongTensor).
+        #Corresponding label as tensor (LongTensor).
+        return (
+            torch.tensor(encoded, dtype=torch.long),
+            torch.tensor(label, dtype=torch.long)
+        )
+
+    def __len__(self):
+        #Returns the total number of samples in the dataset.
+        return len(self.data)
+
+    def _longest_encoded_length(self):
+        #Private helper method to find the length of the longest encoded text.
+        max_length = 0
+        for encoded_text in self.encoded_texts:
+            encoded_length = len(encoded_text)
+            if encoded_length > max_length:
+                max_length = encoded_length
+        return max_length
+
+train_dataset = SpamDataset(
+    csv_file="train.csv",
+    max_length=None,
+    tokeniser=tokeniser
+)
+
+#print(train_dataset.max_length)
+
+val_dataset = SpamDataset(
+    csv_file="validation.csv",
+    max_length=train_dataset.max_length,
+    tokeniser=tokeniser
+)
+
+test_dataset = SpamDataset(
+    csv_file="test.csv",
+    max_length=train_dataset.max_length,
+    tokeniser=tokeniser
+)
+
+from torch.utils.data import DataLoader
+
+num_workers = 0
+batch_size = 8
+torch.manual_seed(123)
+
+train_loader = DataLoader (
+    dataset=train_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_workers,
+    drop_last=True,
+)
+
+val_loader = DataLoader(
+    dataset=val_dataset,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    drop_last=False,
+)
+
+test_loader = DataLoader(
+    dataset=test_dataset,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    drop_last=False,
+)
+
+for input_batch, target_batch in train_loader:
+    pass
+#print("Input batch dimensions:", input_batch.shape)
+#print("Label batch dimensions:", target_batch.shape)
+
+print(f"{len(train_loader)} training batches")
+print(f"{len(val_loader)} validation batches")
+print(f"{len(test_loader)} test batches")
