@@ -1129,6 +1129,7 @@ def generate_and_print_sample(model, tokeniser, device, start_context):
     print(decoded_text.replace("\n", " "))
     model.train()
 
+
 '''
 def train_model_simple(model, train_loader, val_loader, optimiser, device, num_epochs, eval_freq, eval_iter, start_context, tokeniser):
     train_losses, val_losses, track_tokens_seen = [], [], [] #Inintialise lists to track losses and tokens seen
@@ -1162,8 +1163,11 @@ model = GPTModel(GPT_CONFIG_124M)
 model.to(device)
 optimiser = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
 num_epochs = 15
-train_losses, val_losses, tokens_seen = train_model_simple(model, train_loader, val_loader, optimiser, device, num_epochs=num_epochs, eval_freq=5, eval_iter=5, start_context="Every effort moves you", tokeniser=tokeniser)
+#train_losses, val_losses, tokens_seen = train_model_simple(model, train_loader, val_loader, optimiser, device, num_epochs=num_epochs, eval_freq=5, eval_iter=5, start_context="Every effort moves you", tokeniser=tokeniser)
 
+'''
+
+'''
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 def plot_losses(epochs_seen, tokens_seen, train_losses, val_losses):
@@ -1178,12 +1182,14 @@ def plot_losses(epochs_seen, tokens_seen, train_losses, val_losses):
     ax2.plot(tokens_seen, train_losses, alpha=0)
     ax2.set_xlabel("Tokens seen")
     fig.tight_layout()
-    plt.show()
-
-epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
-plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
+    #plt.show()
 
 '''
+
+#epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
+#plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
+
+
 
 model.to("cpu")
 model.eval()
@@ -1220,6 +1226,8 @@ torch.manual_seed(123)
 next_token_id = torch.multinomial(probas, num_samples=1).item()
 #print(inverse_vocab[next_token_id])
 
+'''
+
 def print_sample_tokens(probas):
     torch.manual_seed(123)
     sample = [torch.multinomial(probas, num_samples=1).item() for i in range(1_000)]
@@ -1228,12 +1236,14 @@ def print_sample_tokens(probas):
         print(f"{freq} x {inverse_vocab[i]}")
 #print_sample_tokens(probas)
 
+'''
+
 def softmax_with_temperature(logits, temperature):
     scaled_logits = logits/temperature
     return torch.softmax(scaled_logits, dim=0)
 
-
 '''
+
 temperatures = [1, 0.1, 5]
 scaled_probas = [softmax_with_temperature(next_token_logits, T) for T in temperatures]
 x = torch.arange(len(vocab))
@@ -1245,8 +1255,8 @@ ax.set_ylabel('Probability')
 ax.set_xticks(x)
 ax.set_xticklabels(vocab.keys(), rotation=90)
 ax.legend()
-plt.tight_layout()
-plt.show()
+#plt.tight_layout()
+#plt.show()
 
 '''
 
@@ -1264,6 +1274,8 @@ new_logits = torch.where(
 
 topk_probs = torch.softmax(new_logits, dim=0)
 #print(topk_probs)
+
+
 
 def generate(model, idx, max_new_tokens, context_size, temperature=0.0, top_k=None, eos_id=None):
     for _ in range(max_new_tokens):
@@ -1299,5 +1311,149 @@ token_ids = generate(
     top_k=25,
     temperature=1.4
 )
-print("Output text:\n", token_ids_to_text(token_ids, tokeniser))
+#print("Output text:\n", token_ids_to_text(token_ids, tokeniser))
 
+
+'''
+torch.save(model.state_dict(), "model.pth")
+model = GPTModel(GPT_CONFIG_124M)
+model.load_state_dict(torch.load("model.pth", map_location=device))
+model.eval()
+
+torch.save({
+    "model_state_dict": model.state_dict(),
+    "optimiser_state_dict": optimiser.state_dict(),
+    },
+    "model_and_optimiser.pth"
+)
+
+checkpoint = torch.load("model_and_optimiser.pth", map_location=device)
+model = GPTModel(GPT_CONFIG_124M)
+model.load_state_dict(checkpoint["model_state_dict"])
+optimiser = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=0.1)
+optimiser.load_state_dict(checkpoint["optimiser_state_dict"])
+#model.train();
+
+For downloading gpt_download.py module from book repo
+
+import urllib.request
+url = (
+    "https://raw.githubusercontent.com/rasbt/"
+    "LLMs-from-scratch/main/ch05/"
+    "01_main-chapter-code/gpt_download.py"
+)
+filename = url.split('/')[-1]
+urllib.request.urlretrieve(url, filename)
+
+'''
+
+from gpt_download import download_and_load_gpt2
+settings, params = download_and_load_gpt2(
+    model_size="124M", models_dir="gpt2"
+)
+
+#print("Settings:", settings)
+#print("Parameter dictionary keys:", params.keys())
+
+
+
+model_configs = {
+    "gpt2-small (124M)": {"emb_dim": 768, "n_layers": 12, "n_heads": 12},
+    "gpt2-medium (355M)": {"emb_dim": 1024, "n_layers": 24, "n_heads": 16},
+    "gpt2-large (774M)": {"emb_dim": 1280, "n_layers": 36, "n_heads": 20},
+    "gpt2_xl (1558M)": {"emb_dim": 1600, "n_layers": 48, "n_heads": 25},
+}
+
+model_name = "gpt2-small (124M)"
+NEW_CONFIG = GPT_CONFIG_124M.copy()
+NEW_CONFIG.update(model_configs[model_name])
+
+NEW_CONFIG.update({"context_length": 1024})
+NEW_CONFIG.update({"qkv_bias": True})
+
+gpt = GPTModel(NEW_CONFIG)
+gpt.eval()
+
+def assign(left, right):
+    # Check if the shapes of the left and right tensors match
+    if left.shape != right.shape:
+        raise ValueError(f"Shape mismatch. Left: {left.shape}, "
+                         "Right: {right_shape}"
+        )
+    # If they match, convert 'right' (likely a NumPy array) into a PyTorch parameter tensor
+    return torch.nn.Parameter(torch.tensor(right))
+
+import numpy as np
+
+
+def load_weights_into_gpt(gpt, params):
+    #Load positional embeddings (wpe = word positional embeddings)
+    gpt.pos_emb.weight = assign(gpt.pos_emb.weight, params['wpe'])
+
+    #Load token embeddings (wte = word token embeddings)
+    gpt.tok_emb.weight = assign(gpt.tok_emb.weight, params['wte'])
+
+    #Loop over each transformer block (layer)
+    for b in range(len(params["blocks"])):
+        #Split combined query, key, value weights into separate matrices along the last axis
+        q_w, k_w, v_w = np.split((params["blocks"][b]["attn"]["c_attn"])["w"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.weight = assign(gpt.trf_blocks[b].att.W_query.weight,
+                                                      q_w.T)  # Transpose for PyTorch-like convention
+        gpt.trf_blocks[b].att.W_key.weight = assign(gpt.trf_blocks[b].att.W_key.weight, k_w.T)
+        gpt.trf_blocks[b].att.W_value.weight = assign(gpt.trf_blocks[b].att.W_value.weight, v_w.T)
+
+        #Split combined query, key, value biases
+        q_b, k_b, v_b = np.split((params["blocks"][b]["attn"]["c_attn"])["b"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.bias = assign(gpt.trf_blocks[b].att.W_query.bias, q_b)
+        gpt.trf_blocks[b].att.W_key.bias = assign(gpt.trf_blocks[b].att.W_key.bias, k_b)
+        gpt.trf_blocks[b].att.W_value.bias = assign(gpt.trf_blocks[b].att.W_value.bias, v_b)
+
+        #Load output projection weights and bias for attention mechanism
+        gpt.trf_blocks[b].att.out_proj.weight = assign(gpt.trf_blocks[b].att.out_proj.weight,
+                                                       params["blocks"][b]["attn"]["c_proj"]["w"].T)
+        gpt.trf_blocks[b].att.out_proj.bias = assign(gpt.trf_blocks[b].att.out_proj.bias,
+                                                     params["blocks"][b]["attn"]["c_proj"]["b"])
+
+        #Load feedforward layer weights and biases (MLP layers)
+        gpt.trf_blocks[b].ff.layers[0].weight = assign(gpt.trf_blocks[b].ff.layers[0].weight,
+                                                       params["blocks"][b]["mlp"]["c_fc"]["w"].T)
+        gpt.trf_blocks[b].ff.layers[0].bias = assign(gpt.trf_blocks[b].ff.layers[0].bias,
+                                                     params["blocks"][b]["mlp"]["c_fc"]["b"])
+
+        #Output projection from the feedforward block
+        gpt.trf_blocks[b].ff.layers[2].weight = assign(gpt.trf_blocks[b].ff.layers[2].weight,
+                                                       params["blocks"][b]["mlp"]["c_proj"]["w"].T)
+        gpt.trf_blocks[b].ff.layers[2].bias = assign(gpt.trf_blocks[b].ff.layers[2].bias,
+                                                     params["blocks"][b]["mlp"]["c_proj"]["b"])
+
+        #Load layer normalization parameters for both pre-attention and pre-MLP norms
+        gpt.trf_blocks[b].norm1.scale = assign(gpt.trf_blocks[b].norm1.scale,
+                                               params["blocks"][b]["ln_1"]["g"])  # "g" for gamma (scale)
+        gpt.trf_blocks[b].norm1.shift = assign(gpt.trf_blocks[b].norm1.shift,
+                                               params["blocks"][b]["ln_1"]["b"])  # "b" for beta (shift)
+        gpt.trf_blocks[b].norm2.scale = assign(gpt.trf_blocks[b].norm2.scale, params["blocks"][b]["ln_2"]["g"])
+        gpt.trf_blocks[b].norm2.shift = assign(gpt.trf_blocks[b].norm2.shift, params["blocks"][b]["ln_2"]["b"])
+
+    #Load final layer norm (at the output of transformer stack)
+    gpt.final_norm.scale = assign(gpt.final_norm.scale, params["g"])
+    gpt.final_norm.shift = assign(gpt.final_norm.shift, params["b"])
+
+    #Load output head (usually shared with token embedding weights for weight tying)
+    gpt.out_head.weight = assign(gpt.out_head.weight, params["wte"])
+
+load_weights_into_gpt(gpt, params)
+gpt.to(device)
+
+torch.manual_seed(123)
+token_ids = generate(
+    model = gpt,
+    idx = text_to_token_ids("Every effort moves you", tokeniser).to(device),
+    max_new_tokens = 25,
+    context_size = NEW_CONFIG["context_length"],
+    top_k = 50,
+    temperature = 1.5
+)
+print("Output text :\n", token_ids_to_text(token_ids, tokeniser))
+train_loss = calc_loss_loader(train_loader, gpt, device)
+val_loss = calc_loss_loader(val_loader, gpt, device)
+print(train_loss, val_loss)
